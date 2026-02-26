@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VC Scout
 
-## Getting Started
+**Precision AI scout for venture capital firms.** Discover, enrich, and evaluate startups aligned with your investment thesis.
 
-First, run the development server:
+> 📖 **[Full Documentation →](Documentation.md)**
+
+---
+
+## Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/RachitMittal-20/Xartup_Fellowship.git
+cd Xartup_Fellowship
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment Variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Create `.env.local` in the project root:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+FIRECRAWL_API_KEY=fc-your-api-key-here
+```
 
-## Learn More
+Get a free key at [firecrawl.dev](https://firecrawl.dev). If omitted, enrichment falls back to mock data — the rest of the app works fully without it.
 
-To learn more about Next.js, take a look at the following resources:
+### Run
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run dev       # Development (http://localhost:3000)
+npm run build     # Production build
+npm run start     # Start production server
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+---
 
-## Deploy on Vercel
+## What It Does
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Page | Description |
+|------|-------------|
+| `/companies` | Search, filter, sort, paginate. Batch select → add to list or export CSV/JSON. Save searches. |
+| `/companies/[id]` | Company profile with overview, thesis match score, signal timeline, notes, save-to-list, and live enrichment. |
+| `/lists` | Create/manage lists. Rename, duplicate, export (CSV/JSON). Delete with confirmation. |
+| `/saved` | Saved search+filter combos with result count preview. One-click re-run. |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**Live Enrichment**: Click "Enrich" on any company profile to scrape their public website via Firecrawl and extract summary, key capabilities, keywords, derived signals, and sources — all server-side.
+
+**Global Search**: `Cmd+K` / `Ctrl+K` to search companies from anywhere.
+
+---
+
+## Tech Stack
+
+Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · shadcn/ui · Firecrawl · localStorage
+
+---
+
+## Deploy
+
+```bash
+vercel
+vercel env add FIRECRAWL_API_KEY
+```
+
+---
+
+## Documentation
+
+See **[Documentation.md](Documentation.md)** for:
+
+- Architecture diagram & design decisions
+- Complete feature deep dive
+- Data model & TypeScript interfaces
+- API reference (`POST /api/enrich`)
+- State management (localStorage hooks)
+- UI component inventory
+- Deployment guide
+
+---
+
+*Built for the Xartup Fellowship VC Sourcing Assignment.*

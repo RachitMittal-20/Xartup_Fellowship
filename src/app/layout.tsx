@@ -34,9 +34,9 @@ export default function RootLayout({
         <TooltipProvider>
           <div className="flex min-h-screen">
             <Sidebar />
-            <div className="flex-1 pl-60">
+            <div className="flex-1 md:pl-60">
               <Header />
-              <main className="p-6">{children}</main>
+              <main className="p-4 md:p-6">{children}</main>
             </div>
           </div>
         </TooltipProvider>
