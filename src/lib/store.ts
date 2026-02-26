@@ -6,6 +6,7 @@ import {
   CompanyList,
   SavedSearch,
   SearchFilters,
+  EnrichmentData,
 } from "./types";
 
 // ── Generic localStorage hook ──────────────────────────────
@@ -183,4 +184,30 @@ export function useSavedSearches() {
   };
 
   return { searches, saveSearch, deleteSearch, loaded };
+}
+
+// ── Enrichment Cache ───────────────────────────────────────
+
+export function useEnrichmentCache() {
+  const [cache, setCache, loaded] = useLocalStorage<
+    Record<string, EnrichmentData>
+  >("vc-scout-enrichment-cache", {});
+
+  const getCached = (companyId: string): EnrichmentData | null => {
+    return cache[companyId] ?? null;
+  };
+
+  const setCached = (companyId: string, data: EnrichmentData) => {
+    setCache((prev) => ({ ...prev, [companyId]: data }));
+  };
+
+  const clearCached = (companyId: string) => {
+    setCache((prev) => {
+      const next = { ...prev };
+      delete next[companyId];
+      return next;
+    });
+  };
+
+  return { getCached, setCached, clearCached, loaded };
 }

@@ -18,10 +18,16 @@ import {
   ListPlus,
   CheckCircle2,
   Sparkles,
+  Loader2,
+  RefreshCw,
+  Zap,
+  Link2,
+  Clock,
+  AlertCircle,
 } from "lucide-react";
 import { companies } from "@/lib/data";
-import { FUND_THESIS } from "@/lib/types";
-import { useNotes, useLists } from "@/lib/store";
+import { FUND_THESIS, EnrichmentData } from "@/lib/types";
+import { useNotes, useLists, useEnrichmentCache } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -259,6 +265,7 @@ export default function CompanyProfilePage({
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="signals">Signals</TabsTrigger>
+          <TabsTrigger value="enrichment">Enrichment</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
         </TabsList>
 
@@ -443,6 +450,15 @@ export default function CompanyProfilePage({
         {/* Notes tab */}
         <TabsContent value="notes" className="pt-4">
           <NotesSection companyId={company.id} />
+        </TabsContent>
+
+        {/* Enrichment tab */}
+        <TabsContent value="enrichment" className="pt-4">
+          <EnrichmentSection
+            companyId={company.id}
+            companyName={company.name}
+            companyWebsite={company.website}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -755,5 +771,276 @@ function SaveToListButton({ companyId }: { companyId: string }) {
         <DialogFooter showCloseButton />
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Enrichment Section ────────────────────────────────────
+
+function EnrichmentSection({
+  companyId,
+  companyName,
+  companyWebsite,
+}: {
+  companyId: string;
+  companyName: string;
+  companyWebsite: string;
+}) {
+  const { getCached, setCached, clearCached, loaded } = useEnrichmentCache();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cached = loaded ? getCached(companyId) : null;
+
+  const runEnrichment = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: companyWebsite, companyName }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Enrichment failed");
+      }
+      setCached(companyId, data as EnrichmentData);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Enrichment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!loaded) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center text-sm text-muted-foreground">
+          Loading…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── No data yet — show CTA ──
+  if (!cached && !loading) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+          <Zap className="h-10 w-10 text-muted-foreground mb-3" />
+          <p className="font-medium text-lg">Live Enrichment</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Fetch and analyze public website content for {companyName}.
+            Extracts summary, capabilities, keywords, and derived signals.
+          </p>
+          {error && (
+            <div className="mt-3 flex items-center gap-2 text-sm text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+          <Button className="mt-4" onClick={runEnrichment} disabled={loading}>
+            <Zap className="h-4 w-4" /> Enrich Now
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── Loading state ──
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+          <p className="font-medium">Enriching {companyName}…</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Scraping public website and extracting structured data.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── Enrichment data display ──
+  return (
+    <div className="space-y-4">
+      {/* Header with actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          Enriched{" "}
+          {new Date(cached!.enrichedAt).toLocaleString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </div>
+        <div className="flex gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              clearCached(companyId);
+              runEnrichment();
+            }}
+            disabled={loading}
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Re-enrich
+          </Button>
+        </div>
+      </div>
+
+      {/* Summary */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Summary</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm leading-relaxed">{cached!.summary}</p>
+        </CardContent>
+      </Card>
+
+      {/* What they do */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">What They Do</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {cached!.whatTheyDo.length > 0 ? (
+            <ul className="space-y-2">
+              {cached!.whatTheyDo.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 mt-0.5 text-primary shrink-0" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No specific capabilities extracted.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Keywords */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Keywords</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-1.5">
+            {cached!.keywords.map((kw) => (
+              <Badge key={kw} variant="secondary">
+                {kw}
+              </Badge>
+            ))}
+            {cached!.keywords.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No keywords extracted.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Derived Signals */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Derived Signals</CardTitle>
+          <CardDescription>
+            Signals inferred from public website content
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {cached!.signals.length > 0 ? (
+            <div className="space-y-3">
+              {cached!.signals.map((signal, i) => (
+                <div
+                  key={i}
+                  className="flex items-start gap-3 rounded-md border p-3"
+                >
+                  <div
+                    className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white text-xs font-bold ${
+                      signal.type === "positive"
+                        ? "bg-green-500"
+                        : signal.type === "negative"
+                        ? "bg-red-500"
+                        : "bg-yellow-500"
+                    }`}
+                  >
+                    {signal.type === "positive"
+                      ? "+"
+                      : signal.type === "negative"
+                      ? "−"
+                      : "~"}
+                  </div>
+                  <div>
+                    <p className="font-medium text-sm">{signal.label}</p>
+                    {signal.detail && (
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {signal.detail}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No signals derived from the content.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sources */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Sources</CardTitle>
+          <CardDescription>
+            Exact URLs scraped for this enrichment
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            {cached!.sources.map((source, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-md border p-3 text-sm"
+              >
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-primary hover:underline min-w-0"
+                >
+                  <Link2 className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{source.url}</span>
+                </a>
+                <span className="text-xs text-muted-foreground shrink-0 ml-3">
+                  {new Date(source.scrapedAt).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {error && (
+        <div className="flex items-center gap-2 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4" />
+          {error}
+        </div>
+      )}
+    </div>
   );
 }
