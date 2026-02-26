@@ -115,6 +115,16 @@ export function useLists() {
     );
   };
 
+  const updateListDescription = (listId: string, description: string) => {
+    setLists((prev) =>
+      prev.map((l) =>
+        l.id === listId
+          ? { ...l, description: description || undefined, updatedAt: new Date().toISOString() }
+          : l
+      )
+    );
+  };
+
   const addCompanyToList = (listId: string, companyId: string) => {
     setLists((prev) =>
       prev.map((l) =>
@@ -143,6 +153,37 @@ export function useLists() {
     );
   };
 
+  const addCompaniesToList = (listId: string, companyIds: string[]) => {
+    setLists((prev) =>
+      prev.map((l) => {
+        if (l.id !== listId) return l;
+        const existing = new Set(l.companyIds);
+        const newIds = companyIds.filter((id) => !existing.has(id));
+        if (newIds.length === 0) return l;
+        return {
+          ...l,
+          companyIds: [...l.companyIds, ...newIds],
+          updatedAt: new Date().toISOString(),
+        };
+      })
+    );
+  };
+
+  const duplicateList = (listId: string) => {
+    const original = lists.find((l) => l.id === listId);
+    if (!original) return;
+    const list: CompanyList = {
+      id: crypto.randomUUID(),
+      name: `${original.name} (copy)`,
+      description: original.description,
+      companyIds: [...original.companyIds],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    setLists((prev) => [...prev, list]);
+    return list;
+  };
+
   const getListsForCompany = (companyId: string) => {
     return lists.filter((l) => l.companyIds.includes(companyId));
   };
@@ -152,8 +193,11 @@ export function useLists() {
     createList,
     deleteList,
     renameList,
+    updateListDescription,
     addCompanyToList,
+    addCompaniesToList,
     removeCompanyFromList,
+    duplicateList,
     getListsForCompany,
     loaded,
   };
@@ -183,7 +227,46 @@ export function useSavedSearches() {
     setSearches((prev) => prev.filter((s) => s.id !== searchId));
   };
 
-  return { searches, saveSearch, deleteSearch, loaded };
+  const renameSearch = (searchId: string, name: string) => {
+    setSearches((prev) =>
+      prev.map((s) => (s.id === searchId ? { ...s, name } : s))
+    );
+  };
+
+  const duplicateSearch = (searchId: string) => {
+    const original = searches.find((s) => s.id === searchId);
+    if (!original) return;
+    const search: SavedSearch = {
+      id: crypto.randomUUID(),
+      name: `${original.name} (copy)`,
+      query: original.query,
+      filters: { ...original.filters },
+      createdAt: new Date().toISOString(),
+    };
+    setSearches((prev) => [...prev, search]);
+    return search;
+  };
+
+  const updateSearch = (
+    searchId: string,
+    updates: { name?: string; query?: string; filters?: SearchFilters }
+  ) => {
+    setSearches((prev) =>
+      prev.map((s) =>
+        s.id === searchId ? { ...s, ...updates } : s
+      )
+    );
+  };
+
+  return {
+    searches,
+    saveSearch,
+    deleteSearch,
+    renameSearch,
+    duplicateSearch,
+    updateSearch,
+    loaded,
+  };
 }
 
 // ── Enrichment Cache ───────────────────────────────────────

@@ -13,10 +13,18 @@ import {
   SlidersHorizontal,
   X,
   Bookmark,
+  CheckSquare,
+  Square,
+  Minus,
+  ListPlus,
+  Download,
+  FileSpreadsheet,
+  FileJson,
+  Check,
 } from "lucide-react";
 import { companies, sectors, stages, locations, teamSizes } from "@/lib/data";
 import { Company } from "@/lib/types";
-import { useSavedSearches } from "@/lib/store";
+import { useSavedSearches, useLists } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +52,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type SortKey = "name" | "sector" | "stage" | "location" | "foundedYear" | "teamSize";
 type SortDir = "asc" | "desc";
@@ -91,6 +106,12 @@ function CompaniesLoadingSkeleton() {
 function CompaniesPageInner() {
   const searchParams = useSearchParams();
   const { saveSearch } = useSavedSearches();
+  const {
+    lists,
+    createList,
+    addCompaniesToList,
+    loaded: listsLoaded,
+  } = useLists();
 
   // --- state ---
   const [query, setQuery] = useState("");
@@ -103,6 +124,11 @@ function CompaniesPageInner() {
   const [page, setPage] = useState(1);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [searchName, setSearchName] = useState("");
+
+  // Batch selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [addToListOpen, setAddToListOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
 
   // Hydrate from URL params (for saved search re-runs)
   useEffect(() => {
@@ -209,6 +235,85 @@ function CompaniesPageInner() {
       <ArrowDown className="h-3.5 w-3.5" />
     );
   }
+
+  // ── Batch selection helpers ──
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginated.length) {
+      // Deselect all on current page
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginated.forEach((c) => next.delete(c.id));
+        return next;
+      });
+    } else {
+      // Select all on current page
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        paginated.forEach((c) => next.add(c.id));
+        return next;
+      });
+    }
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(sorted.map((c) => c.id)));
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const pageSelectedCount = paginated.filter((c) => selectedIds.has(c.id)).length;
+  const allPageSelected = paginated.length > 0 && pageSelectedCount === paginated.length;
+  const somePageSelected = pageSelectedCount > 0 && !allPageSelected;
+
+  // ── Export helpers ──
+  const exportSelectedCSV = () => {
+    const selected = sorted.filter((c) => selectedIds.has(c.id));
+    if (selected.length === 0) return;
+
+    const headers = ["Name", "Sector", "Stage", "Location", "Founded", "Team Size", "Website", "Founders", "Tags", "Description"];
+    const rows = selected.map((c) => [
+      c.name, c.sector, c.stage, c.location,
+      String(c.foundedYear), c.teamSize, c.website,
+      c.founders.join("; "), c.tags.join("; "), c.description,
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    downloadFile(csv, `companies-export-${selectedIds.size}.csv`, "text/csv");
+  };
+
+  const exportSelectedJSON = () => {
+    const selected = sorted.filter((c) => selectedIds.has(c.id));
+    if (selected.length === 0) return;
+    const json = JSON.stringify(
+      { exportedAt: new Date().toISOString(), count: selected.length, companies: selected },
+      null,
+      2
+    );
+    downloadFile(json, `companies-export-${selectedIds.size}.json`, "application/json");
+  };
+
+  const handleAddToList = (listId: string) => {
+    addCompaniesToList(listId, Array.from(selectedIds));
+    setAddToListOpen(false);
+  };
+
+  const handleCreateAndAdd = () => {
+    if (!newListName.trim()) return;
+    const list = createList(newListName.trim());
+    addCompaniesToList(list.id, Array.from(selectedIds));
+    setNewListName("");
+    setAddToListOpen(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -392,23 +497,133 @@ function CompaniesPageInner() {
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
             {sorted.length} {sorted.length === 1 ? "company" : "companies"} found
-          </span>
-          {activeFilterCount > 0 && (
-            <div className="flex items-center gap-1.5">
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>
-                {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} active
+            {selectedIds.size > 0 && (
+              <span className="ml-2 text-foreground font-medium">
+                · {selectedIds.size} selected
               </span>
-            </div>
-          )}
+            )}
+          </span>
+          <div className="flex items-center gap-3">
+            {activeFilterCount > 0 && (
+              <div className="flex items-center gap-1.5">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>
+                  {activeFilterCount} {activeFilterCount === 1 ? "filter" : "filters"} active
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Batch action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-4 py-2.5">
+          <span className="text-sm font-medium">
+            {selectedIds.size} {selectedIds.size === 1 ? "company" : "companies"} selected
+          </span>
+          {selectedIds.size < sorted.length && (
+            <Button variant="link" size="sm" className="text-xs h-auto p-0" onClick={selectAllFiltered}>
+              Select all {sorted.length}
+            </Button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {/* Add to List */}
+            <Dialog open={addToListOpen} onOpenChange={setAddToListOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <ListPlus className="h-4 w-4" /> Add to List
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add {selectedIds.size} Companies to List</DialogTitle>
+                  <DialogDescription>
+                    Choose an existing list or create a new one.
+                  </DialogDescription>
+                </DialogHeader>
+                {listsLoaded && (
+                  <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                    {lists.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No lists yet. Create one below.
+                      </p>
+                    )}
+                    {lists.map((list) => (
+                      <button
+                        key={list.id}
+                        onClick={() => handleAddToList(list.id)}
+                        className="flex w-full items-center gap-3 rounded-md border p-3 text-left text-sm hover:bg-accent transition-colors"
+                      >
+                        <ListPlus className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{list.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {list.companyIds.length} companies
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 pt-2 border-t">
+                  <Input
+                    placeholder="New list name…"
+                    value={newListName}
+                    onChange={(e) => setNewListName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateAndAdd()}
+                  />
+                  <Button size="sm" disabled={!newListName.trim()} onClick={handleCreateAndAdd}>
+                    Create & Add
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Export dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Download className="h-4 w-4" /> Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportSelectedCSV}>
+                  <FileSpreadsheet className="h-4 w-4" /> Export as CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportSelectedJSON}>
+                  <FileJson className="h-4 w-4" /> Export as JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button variant="ghost" size="sm" onClick={clearSelection}>
+              <X className="h-3.5 w-3.5" /> Clear
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <button
+                  className="flex items-center justify-center hover:text-foreground transition-colors"
+                  onClick={toggleSelectAll}
+                  title={allPageSelected ? "Deselect all" : "Select all on page"}
+                >
+                  {allPageSelected ? (
+                    <CheckSquare className="h-4 w-4 text-primary" />
+                  ) : somePageSelected ? (
+                    <Minus className="h-4 w-4 text-primary" />
+                  ) : (
+                    <Square className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              </TableHead>
               <TableHead>
                 <button
                   className="flex items-center gap-1.5 hover:text-foreground transition-colors"
@@ -463,13 +678,25 @@ function CompaniesPageInner() {
           <TableBody>
             {paginated.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                   No companies match your search.
                 </TableCell>
               </TableRow>
             ) : (
               paginated.map((company) => (
-                <TableRow key={company.id} className="group">
+                <TableRow key={company.id} className={`group ${selectedIds.has(company.id) ? "bg-muted/50" : ""}`}>
+                  <TableCell>
+                    <button
+                      className="flex items-center justify-center hover:text-foreground transition-colors"
+                      onClick={() => toggleSelect(company.id)}
+                    >
+                      {selectedIds.has(company.id) ? (
+                        <CheckSquare className="h-4 w-4 text-primary" />
+                      ) : (
+                        <Square className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
+                    </button>
+                  </TableCell>
                   <TableCell>
                     <Link
                       href={`/companies/${company.id}`}
@@ -556,4 +783,18 @@ function CompaniesPageInner() {
       )}
     </div>
   );
+}
+
+// ── Helpers ───────────────────────────────────────────────
+
+function downloadFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
