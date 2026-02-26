@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Suspense, useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Search,
@@ -11,9 +12,11 @@ import {
   ChevronRight,
   SlidersHorizontal,
   X,
+  Bookmark,
 } from "lucide-react";
 import { companies, sectors, stages, locations, teamSizes } from "@/lib/data";
 import { Company } from "@/lib/types";
+import { useSavedSearches } from "@/lib/store";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +35,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type SortKey = "name" | "sector" | "stage" | "location" | "foundedYear" | "teamSize";
 type SortDir = "asc" | "desc";
@@ -54,6 +66,32 @@ const TEAM_ORDER: Record<string, number> = {
 const PAGE_SIZE = 10;
 
 export default function CompaniesPage() {
+  return (
+    <Suspense fallback={<CompaniesLoadingSkeleton />}>
+      <CompaniesPageInner />
+    </Suspense>
+  );
+}
+
+function CompaniesLoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Companies</h1>
+        <p className="mt-1 text-muted-foreground">
+          Discover and evaluate startups aligned with your thesis.
+        </p>
+      </div>
+      <div className="h-9 w-full max-w-sm animate-pulse rounded-md bg-muted" />
+      <div className="h-64 w-full animate-pulse rounded-lg border bg-muted/30" />
+    </div>
+  );
+}
+
+function CompaniesPageInner() {
+  const searchParams = useSearchParams();
+  const { saveSearch } = useSavedSearches();
+
   // --- state ---
   const [query, setQuery] = useState("");
   const [sectorFilter, setSectorFilter] = useState<string>("all");
@@ -63,6 +101,22 @@ export default function CompaniesPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [searchName, setSearchName] = useState("");
+
+  // Hydrate from URL params (for saved search re-runs)
+  useEffect(() => {
+    const q = searchParams.get("q");
+    const sector = searchParams.get("sector");
+    const stage = searchParams.get("stage");
+    const location = searchParams.get("location");
+    const teamSize = searchParams.get("teamSize");
+    if (q) setQuery(q);
+    if (sector) setSectorFilter(sector);
+    if (stage) setStageFilter(stage);
+    if (location) setLocationFilter(location);
+    if (teamSize) setTeamSizeFilter(teamSize);
+  }, [searchParams]);
 
   // --- derived ---
   const filtered = useMemo(() => {
@@ -270,6 +324,67 @@ export default function CompaniesPage() {
               <X className="h-3.5 w-3.5" />
               Clear{activeFilterCount > 0 && ` (${activeFilterCount})`}
             </Button>
+          )}
+
+          {/* Save Search */}
+          {(activeFilterCount > 0 || query) && (
+            <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Bookmark className="h-3.5 w-3.5" />
+                  Save Search
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Save Search</DialogTitle>
+                  <DialogDescription>
+                    Save this search and filter combination to re-run later.
+                  </DialogDescription>
+                </DialogHeader>
+                <Input
+                  placeholder="Search name…"
+                  value={searchName}
+                  onChange={(e) => setSearchName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && searchName.trim()) {
+                      saveSearch(searchName.trim(), query, {
+                        sector: sectorFilter !== "all" ? sectorFilter : undefined,
+                        stage: stageFilter !== "all" ? stageFilter : undefined,
+                        location: locationFilter !== "all" ? locationFilter : undefined,
+                        teamSize: teamSizeFilter !== "all" ? teamSizeFilter : undefined,
+                      });
+                      setSearchName("");
+                      setSaveDialogOpen(false);
+                    }
+                  }}
+                />
+                <div className="flex flex-wrap gap-1.5 text-sm">
+                  {query && <Badge variant="secondary">Query: "{query}"</Badge>}
+                  {sectorFilter !== "all" && <Badge variant="secondary">Sector: {sectorFilter}</Badge>}
+                  {stageFilter !== "all" && <Badge variant="secondary">Stage: {stageFilter}</Badge>}
+                  {locationFilter !== "all" && <Badge variant="secondary">Location: {locationFilter}</Badge>}
+                  {teamSizeFilter !== "all" && <Badge variant="secondary">Team: {teamSizeFilter}</Badge>}
+                </div>
+                <DialogFooter>
+                  <Button
+                    disabled={!searchName.trim()}
+                    onClick={() => {
+                      saveSearch(searchName.trim(), query, {
+                        sector: sectorFilter !== "all" ? sectorFilter : undefined,
+                        stage: stageFilter !== "all" ? stageFilter : undefined,
+                        location: locationFilter !== "all" ? locationFilter : undefined,
+                        teamSize: teamSizeFilter !== "all" ? teamSizeFilter : undefined,
+                      });
+                      setSearchName("");
+                      setSaveDialogOpen(false);
+                    }}
+                  >
+                    <Bookmark className="h-4 w-4" /> Save
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
         </div>
 
